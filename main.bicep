@@ -69,9 +69,13 @@ resource bastionpublicip 'Microsoft.Network/publicIPAddresses@2021-05-01' = {
 }
 
 // Bastion did not work using the "Standard" SKU
-/*resource bastion 'Microsoft.Network/bastionHosts@2019-04-01' = {
+// Bastion is commented out as it takes too long to deploy during testing
+/*resource bastion 'Microsoft.Network/bastionHosts@2021-05-01' = {
   name: 'adf-lab-bastion'
   location: rglocation
+  sku: {
+    name: 'Basic'
+  }
   properties: {
     ipConfigurations: [
       {
