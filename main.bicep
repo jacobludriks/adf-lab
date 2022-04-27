@@ -16,8 +16,8 @@ var sqlname = 'adfsql${uniqueString(resourceGroup().id)}'
 var databasename = 'sampledata'
 var sqlusername = 'adfsqladmin'
 
-// This id is for "Key Vault Reader"
-var kvreaderrole = '21090545-7ca7-4776-b22c-e363652d74d2'
+// This id is for "Key Vault Secrets User"
+var kvreaderrole = '4633458b-17de-408a-b874-0445c86b69e6'
 // This id is for "Storage Blob Data Contributor"
 var blobcontributorrole = 'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
 
@@ -264,6 +264,7 @@ resource sqlserver 'Microsoft.Sql/servers@2021-11-01-preview' = {
     version: '12.0'
     administratorLogin: sqlusername
     administratorLoginPassword: sqlpassword
+    minimalTlsVersion: '1.2'
   }
 }
 
@@ -277,7 +278,7 @@ resource sqlfirewall 'Microsoft.Sql/servers/firewallRules@2021-11-01-preview' = 
 }
 
 resource database 'Microsoft.Sql/servers/databases@2021-11-01-preview' = {
-  name: 'databasename'
+  name: databasename
   parent: sqlserver
   location: rglocation
   sku: {
@@ -328,11 +329,11 @@ resource adflinkedsql 'Microsoft.DataFactory/factories/linkedservices@2018-06-01
   properties: {
     type: 'AzureSqlDatabase'
     typeProperties: {
-      connectionString: database.properties.
+      connectionString: 'Data Source=tcp:${sqlserver.properties.fullyQualifiedDomainName},1433;Initial Catalog=${databasename};User ID=${sqlusername}@${sqlserver.name};Encrypt=True;Connection Timeout=30'
       password: {
         type: 'AzureKeyVaultSecret'
         store: {
-          referenceName: 'Data Source=tcp:${sqlserver.properties.fullyQualifiedDomainName},1433;Initial Catalog=${databasename};User ID=${sqlusername}@${sqlfirewall.name};Trusted Connection=False;Encrypt=True;Connection Timeout=30'
+          referenceName: adflinkedkv.name
           type: 'LinkedServiceReference'
         }
         secretName: kvdbconnection.name
