@@ -3,13 +3,15 @@ param rglocation string = 'australiaeast'
 @maxLength(20)
 param adminusername string = 'adflab'
 @secure()
-@minLength(12)
-@maxLength(128)
 param adminpassword string
 
 var vmname = 'adf-lab-vm'
 var nicname = 'adf-lab-vm-nic1'
-var adfname = 'adf-lab-${uniqueString(subscription().subscriptionId)}'
+var adfname = 'adf-lab-${uniqueString(resourceGroup().id)}'
+var kvname = 'adf-lab-kv-${uniqueString(resourceGroup().id)}'
+
+// This id is for "Key Vault Reader"
+var kvreaderrole = '21090545-7ca7-4776-b22c-e363652d74d2'
 
 resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
   name: 'adf-lab-vnet'
@@ -40,6 +42,7 @@ resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
         }
       }
     ]
+    enableDdosProtection: false
   }
 }
 
@@ -48,22 +51,23 @@ resource bastionpublicip 'Microsoft.Network/publicIPAddresses@2021-05-01' = {
   location: rglocation
   sku: {
     name: 'Standard'
+    tier: 'Regional'
   }
   properties: {
     publicIPAllocationMethod: 'Static'
+    publicIPAddressVersion: 'IPv4'
+    idleTimeoutInMinutes: 4
   }
 }
 
-resource bastion 'Microsoft.Network/bastionHosts@2021-05-01' = {
+// Bastion did not work using the "Standard" SKU
+resource bastion 'Microsoft.Network/bastionHosts@2019-04-01' = {
   name: 'adf-lab-bastion'
   location: rglocation
-  sku: {
-    name: 'Standard'
-  }
   properties: {
     ipConfigurations: [
       {
-        name: 'ipconfig'
+        name: 'IpConf'
         properties: {
           subnet: {
             id: '${vnet.id}/subnets/AzureBastionSubnet'
@@ -77,6 +81,11 @@ resource bastion 'Microsoft.Network/bastionHosts@2021-05-01' = {
   }
 }
 
+resource irvmnsg 'Microsoft.Network/networkSecurityGroups@2021-05-01' = {
+  name: 'adf-lab-vm-nsg'
+  location: rglocation
+}
+
 resource irvmnic 'Microsoft.Network/networkInterfaces@2021-05-01' = {
   name: nicname
   location: rglocation
@@ -85,6 +94,7 @@ resource irvmnic 'Microsoft.Network/networkInterfaces@2021-05-01' = {
       {
         name: 'ipconfig1'
         properties: {
+          privateIPAddressVersion: 'IPv4'
           subnet: {
             id: '${vnet.id}/subnets/vm'
           }
@@ -92,6 +102,9 @@ resource irvmnic 'Microsoft.Network/networkInterfaces@2021-05-01' = {
         }
       }
     ]
+    networkSecurityGroup: {
+      id: irvmnsg.id
+    }
   }
 }
 
@@ -155,5 +168,29 @@ resource adf 'Microsoft.DataFactory/factories@2018-06-01' = {
     type: 'SystemAssigned'
   }
   properties: {
+  }
+}
+
+resource keyvault 'Microsoft.KeyVault/vaults@2021-10-01' = {
+  name: kvname
+  location: rglocation
+  properties: {
+    enableRbacAuthorization: true
+    sku: {
+      family: 'A'
+      name: 'standard'
+    }
+    softDeleteRetentionInDays: 7
+    tenantId: tenant().tenantId
+  }
+}
+
+resource kvadfrole 'Microsoft.Authorization/roleAssignments@2020-10-01-preview' = {
+  scope: keyvault
+  name: guid(keyvault.id, adf.id, kvreaderrole)
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', kvreaderrole)
+    principalId: adf.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
